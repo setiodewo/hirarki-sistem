@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hirarki Sistem</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+<style>
+  html, body { height: 100%; }
+  body { display: flex; flex-direction: column; overflow: hidden; }
+  main { flex: 1 1 auto; min-height: 0; }
+  .pane { min-height: 0; }
+  .pane-header { padding: .6rem .75rem; }
+  .tree-wrap { flex: 1 1 auto; overflow: auto; padding: .5rem; }
+  .tree-row {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 8px; border-radius: 6px; cursor: pointer;
+    user-select: none; margin-bottom: 1px;
+  }
+  .tree-row:hover { background-color: #e9ecef; }
+  .tree-row.active { background-color: #0d6efd; color: #fff; }
+  .tree-icon { display: inline-flex; width: 16px; justify-content: center; font-size: .95rem; }
+  .tree-icon i { pointer-events: none; }
+  .tree-icon .folder-closed { color: #7b8794; }
+  .tree-icon .folder-open { color: #e8a300; }
+  .tree-icon .file-icon { color: #a9b5c1; }
+  .tree-row.active .tree-icon i { color: #fff; }
+  .tree-name { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .node-menu { margin-left: auto; padding: 0 4px; width: 22px; text-align: center; border-radius: 4px; color: #8a94a0; line-height: 1; }
+  .node-menu:hover { color: #0d6efd; background: #e9ecef; }
+  .tree-row.active .node-menu { color: #dbe8ff; }
+  .tree-row.active .node-menu:hover { color: #fff; background: rgba(255,255,255,.2); }
+  .node-menu-popup {
+    position: fixed; z-index: 2000; display: none; min-width: 190px;
+    background: #fff; border: 1px solid #e2e6ea; border-radius: .5rem;
+    padding: .4rem;
+    box-shadow: 0 .5rem 1.25rem rgba(15, 23, 42, .18);
+  }
+  .node-menu-popup.show { display: block; }
+  .node-menu-popup .menu-item {
+    display: flex; align-items: center; gap: .6rem;
+    width: 100%; border: 0; background: #fff;
+    padding: .5rem .75rem;
+    border-radius: .375rem;
+    font-size: .875rem; line-height: 1.2; color: #212529; text-align: left;
+    cursor: pointer; white-space: nowrap;
+  }
+  .node-menu-popup .menu-item:hover { background: #e7f1ff; color: #0d6efd; }
+  .node-menu-popup .menu-item.danger:hover { background: #fdecea; color: #dc3545; }
+  .node-menu-popup .menu-item i { font-size: 1rem; width: 18px; text-align: center; }
+  .node-menu-popup .menu-divider { height: 1px; border: 0; background: #eef1f4; margin: .4rem .25rem; }
+  .rename-input { flex: 1 1 auto; min-width: 0; }
+  .toolbar-btn { white-space: nowrap; }
+  .tree-row.dragging { opacity: 0.4; }
+  .tree-row.drop-before { box-shadow: 0 -2px 0 #0d6efd; }
+  .tree-row.drop-after { box-shadow: 0 2px 0 #0d6efd; }
+  .tree-row.drop-child { background-color: #cfe2ff; outline: 1px dashed #0d6efd; }
+  .tree-row.child { position: relative; --hc: #5f7387; }
+  .tree-row.child::before,
+  .tree-row.child::after {
+    content: '';
+    position: absolute;
+    pointer-events: none;
+    border-color: var(--hc);
+  }
+  .tree-row.child::after {
+    top: 0;
+    bottom: 0;
+    left: calc(var(--ind, 0px) - 10px);
+    border-left: 1px solid var(--hc);
+  }
+  .tree-row.child::before {
+    top: 50%;
+    left: calc(var(--ind, 0px) - 10px);
+    width: 10px;
+    border-top: 1px solid var(--hc);
+  }
+  .tree-row.child.last::after {
+    bottom: auto;
+    height: 50%;
+  }
+  .tree-row.child.active { z-index: 2; --hc: #eaf2ff; }
+  .tree-branch.bridge { position: relative; --hc: #5f7387; }
+  .tree-branch.bridge::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: calc(var(--ind, 0px) - 10px);
+    border-left: 1px solid var(--hc);
+    pointer-events: none;
+    z-index: 1;
+  }
+  #detailEmpty { display: grid; place-items: center; height: 100%; text-align: center; color: #adb5bd; }
+  .resize-divider {
+    flex: 0 0 6px;
+    cursor: col-resize;
+    background: #e9ecef;
+    touch-action: none;
+    user-select: none;
+    transition: background .15s;
+  }
+  .resize-divider:hover, body.resizing .resize-divider { background: #0d6efd; }
+  body.resizing { cursor: col-resize; user-select: none; }
+  @media (max-width: 900px) {
+    main { flex-direction: column; }
+    .resize-divider { display: none; }
+    #leftPane, #rightPane { width: 100% !important; max-width: none !important; min-width: 0 !important; }
+    #leftPane { flex: 0 0 45%; }
+    #rightPane { flex: 1 1 auto; }
+  }
+</style>
+</head>
+<body class="bg-body-tertiary">
+
+<nav class="navbar bg-primary px-2 py-2 d-flex align-items-center gap-2">
+  <span class="navbar-brand mb-0 h1 text-white d-flex align-items-center gap-2">
+    <i class="bi bi-diagram-3-fill"></i> Hirarki Sistem
+  </span>
+  <div class="dropdown">
+    <button class="btn btn-light btn-sm text-primary fw-semibold" type="button" data-bs-toggle="dropdown">
+      <i class="bi bi-folder2-open me-1"></i>Berkas
+    </button>
+    <ul id="fileMenu" class="dropdown-menu">
+      <li><a class="dropdown-item" href="#" data-action="new"><i class="bi bi-file-earmark-plus me-2"></i>Baru<span class="text-muted float-end">Ctrl+N</span></a></li>
+      <li><a class="dropdown-item" href="#" data-action="open"><i class="bi bi-folder2-open me-2"></i>Buka<span class="text-muted float-end">Ctrl+O</span></a></li>
+      <li><hr class="dropdown-divider"></li>
+      <li><a class="dropdown-item" href="#" data-action="save"><i class="bi bi-save me-2"></i>Simpan<span class="text-muted float-end">Ctrl+S</span></a></li>
+      <li><a class="dropdown-item" href="#" data-action="saveas"><i class="bi bi-save2 me-2"></i>Simpan Sebagai</a></li>
+    </ul>
+  </div>
+  <div class="ms-auto d-flex align-items-center gap-2">
+    <span id="docLabel" class="badge rounded-pill text-bg-light text-truncate" style="max-width: 260px;">Hirarki Baru.hirarki</span>
+    <span id="dirtyDot" class="rounded-circle bg-warning" style="width:8px; height:8px; display:none;" title="Perubahan belum disimpan"></span>
+  </div>
+</nav>
+
+<main class="d-flex overflow-hidden">
+
+  <section id="leftPane" class="pane d-flex flex-column bg-white border-end flex-shrink-0" style="width:40%; min-width:260px;">
+    <div class="pane-header d-flex flex-column gap-2 border-bottom">
+      <div class="d-flex align-items-center gap-2">
+        <div class="input-group input-group-sm flex-grow-1">
+          <span class="input-group-text"><i class="bi bi-search"></i></span>
+          <input id="searchInp" class="form-control" placeholder="Cari node..." autocomplete="off">
+        </div>
+        <button id="btnExpandAll" class="btn btn-outline-secondary btn-sm" title="Perluas semua"><i class="bi bi-arrows-expand-vertical"></i></button>
+        <button id="btnCollapseAll" class="btn btn-outline-secondary btn-sm" title="Ciutkan semua"><i class="bi bi-arrows-collapse-vertical"></i></button>
+      </div>
+    </div>
+
+    <div id="tree" class="tree-wrap"></div>
+
+    <div class="pane-header border-top d-flex justify-content-between align-items-center">
+      <span class="d-flex align-items-center gap-3">
+        <span class="text-muted small"><i class="bi bi-arrows-move me-1 text-primary"></i>Seret node untuk mengatur urutan</span>
+        <span class="text-muted small"><i class="bi bi-list-nested me-1"></i><span id="nodeCount">0 node</span></span>
+      </span>
+      <a id="btnClearSearch" href="#" class="small text-muted" style="display:none;">Bersihkan pencarian</a>
+    </div>
+  </section>
+
+  <div id="divider" class="resize-divider" title="Seret untuk mengubah ukuran panel"></div>
+
+  <section id="rightPane" class="pane d-flex flex-column bg-white flex-grow-1">
+
+    <div id="detailEmpty" class="flex-grow-1">
+      <div>
+        <i class="bi bi-mouse-pointer" style="font-size:2.5rem;"></i>
+        <p class="mt-2 mb-0 fw-semibold">Belum ada node aktif</p>
+        <p class="mb-0 small">Pilih sebuah node pada pohon hirarki untuk<br>melihat dan mengedit detailnya.</p>
+      </div>
+    </div>
+
+    <div id="detailForm" class="d-none flex-column p-3 gap-3 flex-grow-1" style="overflow:auto;">
+      <div>
+        <h5 class="mb-1"><i class="bi bi-hdd-stack me-2 text-primary"></i><span id="detailTitle">-</span></h5>
+        <div id="breadcrumb" class="text-muted small text-break"></div>
+      </div>
+      <div>
+        <label class="form-label" for="inpName">Nama</label>
+        <input id="inpName" class="form-control" autocomplete="off">
+      </div>
+      <div class="row g-2 align-items-end">
+        <div class="col">
+          <label class="form-label" for="inpAssigned">Ditugaskan kepada</label>
+          <input id="inpAssigned" class="form-control" autocomplete="off">
+        </div>
+        <div class="col-auto d-flex flex-column">
+          <label class="form-label" for="chkDone">Selesai</label>
+          <div class="d-flex justify-content-center align-items-center" style="height:38px;">
+            <input type="checkbox" class="form-check-input" id="chkDone">
+          </div>
+        </div>
+        <div class="col-auto">
+          <label class="form-label d-block" for="inpDoneDate">Tanggal Selesai</label>
+          <input type="text" id="inpDoneDate" class="form-control" style="width:160px;" placeholder="dd/mm/yyyy" maxlength="10" autocomplete="off">
+        </div>
+      </div>
+      <div class="d-flex flex-column flex-grow-1">
+        <label class="form-label" for="inpDesc">Deskripsi</label>
+        <textarea id="inpDesc" class="form-control flex-grow-1" rows="8" placeholder="Tuliskan keterangan node ini..."></textarea>
+      </div>
+      <div class="d-flex justify-content-between border-top pt-2 text-muted small flex-wrap gap-2">
+        <span><i class="bi bi-calendar-plus me-1"></i>Dibuat: <span id="metaCreated">-</span></span>
+        <span><i class="bi bi-calendar-check me-1"></i>Diubah: <span id="metaUpdated">-</span></span>
+      </div>
+    </div>
+
+  </section>
+</main>
+
+<div id="nodeMenu" class="node-menu-popup">
+  <button type="button" class="menu-item" id="menuAddRoot"><i class="bi bi-file-earmark-plus"></i>Node Baru</button>
+  <button type="button" class="menu-item" id="menuAddChild"><i class="bi bi-diagram-2"></i>Tambah Child</button>
+  <button type="button" class="menu-item" id="menuRename"><i class="bi bi-pencil"></i>Ubah Nama</button>
+  <hr class="menu-divider">
+  <button type="button" class="menu-item danger" id="menuDeleteNode"><i class="bi bi-trash"></i>Hapus Node</button>
+</div>
+
+<input type="file" id="fileInput" accept=".hirarki,.json" hidden>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  function $(id) { return document.getElementById(id); }
+  var treeEl = $('tree'), searchInp = $('searchInp'),
+    btnExpandAll = $('btnExpandAll'), btnCollapseAll = $('btnCollapseAll'),
+    btnClearSearch = $('btnClearSearch'),
+    detailEmpty = $('detailEmpty'), detailForm = $('detailForm'),
+    detailTitle = $('detailTitle'), breadcrumb = $('breadcrumb'),
+    inpName = $('inpName'), inpDesc = $('inpDesc'),
+    inpAssigned = $('inpAssigned'), chkDone = $('chkDone'),
+    inpDoneDate = $('inpDoneDate'),
+    metaCreated = $('metaCreated'), metaUpdated = $('metaUpdated'),
+    docLabel = $('docLabel'), dirtyDot = $('dirtyDot'),
+    nodeCount = $('nodeCount'), fileInput = $('fileInput'),
+    leftPane = $('leftPane'), divider = $('divider'),
+    nodeMenu = $('nodeMenu'), menuAddRoot = $('menuAddRoot'),
+    menuAddChild = $('menuAddChild'), menuRename = $('menuRename'),
+    menuDeleteNode = $('menuDeleteNode');
+
+  var menuNodeId = null;
+
+  var doc = { roots: [] };
+  var state = {
+    activeId: null,
+    filename: 'Hirarki Baru.hirarki',
+    fileHandle: null,
+    dirty: false,
+    collapsed: new Set(),
+    search: '',
+    rename: null,
+    dragId: null,
+    dropTarget: null,
+    dropped: false
+  };
+
+  function generateId() {
+    return (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : ('n' + Math.random().toString(36).slice(2) + Date.now().toString(36));
+  }
+  function nowIso() { return new Date().toISOString(); }
+  function makeNode(name) {
+    return { id: generateId(), name: name, description: '', assignedTo: '', done: false, doneDate: '', createdAt: nowIso(), updatedAt: nowIso(), children: [] };
+  }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function countDesc(node) { return node.children.reduce(function (sum, c) { return sum + 1 + countDesc(c); }, 0); }
+  function totalNodes() { return doc.roots.reduce(function (sum, n) { return sum + 1 + countDesc(n); }, 0); }
+  function fmtDate(iso) {
+    if (!iso) return '-';
+    var d = new Date(iso);
+    return isNaN(d) ? '-' : d.toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
+  }
+
+  function findNode(id) {
+    function walk(list, path) {
+      for (var i = 0; i < list.length; i++) {
+        var n = list[i];
+        if (n.id === id) return { node: n, path: path.slice() };
+        var r = walk(n.children, path.concat(n));
+        if (r) return r;
+      }
+      return null;
+    }
+    var f = walk(doc.roots, []);
+    if (f) { f.parent = f.path[f.path.length - 1] || null; return f; }
+    return null;
+  }
+
+  function collectAllIds(list, out) {
+    for (var i = 0; i < list.length; i++) {
+      out.push(list[i].id);
+      collectAllIds(list[i].children, out);
+    }
+    return out;
+  }
+
+  function matchQ(node) {
+    var s = state.search;
+    if (!s) return false;
+    return ((node.name || '') + ' ' + (node.description || '')).toLowerCase().indexOf(s) !== -1;
+  }
+  function subtreeHasMatch(node) {
+    if (matchQ(node)) return true;
+    for (var i = 0; i < node.children.length; i++) {
+      if (subtreeHasMatch(node.children[i])) return true;
+    }
+    return false;
+  }
+
+  function findRow(id) {
+    var rows = treeEl.querySelectorAll('.tree-row');
+    for (var i = 0; i < rows.length; i++) if (rows[i].dataset.id === id) return rows[i];
+    return null;
+  }
+
+  function nodeHasId(node, id) {
+    if (node.id === id) return true;
+    var kids = node.children || [];
+    for (var i = 0; i < kids.length; i++) if (nodeHasId(kids[i], id)) return true;
+    return false;
+  }
+
+  function isInvalidDrop(dragId, targetId, position) {
+    if (targetId === dragId) return true;
+    var dragged = findNode(dragId);
+    if (!dragged) return true;
+    if (position === 'child') return nodeHasId(dragged.node, targetId);
+    var tn = findNode(targetId);
+    if (!tn || !tn.parent) return false;
+    if (tn.parent.id === dragId) return true;
+    return nodeHasId(dragged.node, tn.parent.id);
+  }
+
+  function computeZone(row, e) {
+    var rect = row.getBoundingClientRect();
+    var h = row.offsetHeight || rect.height || 24;
+    var y = e.clientY - rect.top;
+    var position = y < h * 0.3 ? 'before' : (y > h * 0.7 ? 'after' : 'child');
+    return isInvalidDrop(state.dragId, row.dataset.id, position) ? null : position;
+  }
+
+  function clearDropIndicators() {
+    var els = treeEl.querySelectorAll('.drop-before, .drop-after, .drop-child, .dragging');
+    for (var i = 0; i < els.length; i++) {
+      els[i].classList.remove('drop-before', 'drop-after', 'drop-child', 'dragging');
+    }
+  }
+
+  function performDrop() {
+    state.dropped = true;
+    var t = state.dropTarget;
+    var dragId = state.dragId;
+    state.dragId = null;
+    state.dropTarget = null;
+    if (!t || !dragId) return;
+    var dragged = findNode(dragId);
+    if (!dragged) return;
+    var srcArr = dragged.parent ? dragged.parent.children : doc.roots;
+    var si = srcArr.indexOf(dragged.node);
+    if (si < 0) return;
+    srcArr.splice(si, 1);
+    var tn = findNode(t.id);
+    if (!tn) return;
+    if (t.position === 'child') {
+      tn.node.children.push(dragged.node);
+      state.collapsed.delete(t.id);
+    } else {
+      var list = tn.parent ? tn.parent.children : doc.roots;
+      var idx = list.indexOf(tn.node);
+      if (idx < 0) return;
+      if (t.position === 'before') list.splice(idx, 0, dragged.node);
+      else list.splice(idx + 1, 0, dragged.node);
+    }
+    state.activeId = dragId;
+    markDirty();
+    renderTree();
+    renderDetail();
+  }
+
+  function renderTree() {
+    treeEl.innerHTML = '';
+    var searching = !!state.search;
+    function render(container, node, depth, isLast) {
+      if (searching && !subtreeHasMatch(node)) return;
+      var kids = node.children || [];
+      var hasKids = kids.length > 0;
+      var collapsed = !searching && state.collapsed.has(node.id);
+      var row = document.createElement('div');
+      row.className = 'tree-row'
+        + (depth > 0 ? ' child' : '')
+        + (isLast ? ' last' : '')
+        + (node.id === state.activeId ? ' active' : '');
+      row.dataset.id = node.id;
+      if (!searching) row.setAttribute('draggable', 'true');
+      var ind = (10 + depth * 20) + 'px';
+      row.style.paddingLeft = ind;
+      row.style.setProperty('--ind', ind);
+      row.innerHTML =
+        '<span class="tree-icon"><i class="bi ' +
+        (hasKids ? (collapsed ? 'bi-folder-fill folder-closed' : 'bi-folder2-open folder-open') : 'bi-file-earmark file-icon') +
+        '"></i></span>' +
+        '<span class="tree-name">' + esc(node.name || '') + '</span>' +
+        '<span class="node-menu" title="Menu node"><i class="bi bi-three-dots-vertical"></i></span>';
+      container.appendChild(row);
+      if (hasKids && !collapsed) {
+        var wrap = document.createElement('div');
+        wrap.className = 'tree-branch';
+        wrap.style.setProperty('--ind', (depth * 20 + 10) + 'px');
+        if (depth > 0 && !isLast) wrap.classList.add('bridge');
+        container.appendChild(wrap);
+        for (var i = 0; i < kids.length; i++) render(wrap, kids[i], depth + 1, i === kids.length - 1);
+      }
+    }
+    for (var i = 0; i < doc.roots.length; i++) render(treeEl, doc.roots[i], 0, i === doc.roots.length - 1);
+    if (!treeEl.children.length) {
+      treeEl.innerHTML = '<div class="text-muted text-center mt-4 px-3"><i class="bi bi-inbox" style="font-size:2rem;display:block;margin-bottom:.5rem;"></i>Belum ada node.<br><button type="button" id="emptyAdd" class="btn btn-primary btn-sm mt-3"><i class="bi bi-file-earmark-plus me-1"></i>Buat Node</button></div>';
+    }
+    btnClearSearch.style.display = searching ? '' : 'none';
+    updateBar();
+  }
+
+  function updateBar() {
+    docLabel.textContent = state.filename || 'hirarki.hirarki';
+    dirtyDot.style.display = state.dirty ? 'inline-block' : 'none';
+    document.title = (state.dirty ? '* ' : '') + (state.filename || 'hirarki.hirarki') + ' — Hirarki Sistem';
+    nodeCount.textContent = totalNodes() + ' node';
+  }
+
+  function selectNode(id) {
+    if (state.activeId === id) { renderDetail(); return; }
+    state.activeId = id;
+    renderTree();
+    renderDetail();
+  }
+
+  function renderDetail() {
+    var f = state.activeId ? findNode(state.activeId) : null;
+    detailEmpty.style.display = f ? 'none' : 'grid';
+    detailForm.classList.toggle('d-flex', !!f);
+    detailForm.classList.toggle('d-none', !f);
+    if (!f) return;
+    inpName.value = f.node.name || '';
+    inpDesc.value = f.node.description || '';
+    inpAssigned.value = f.node.assignedTo || '';
+    chkDone.checked = f.node.done === true;
+    inpDoneDate.value = isoToDmy(f.node.doneDate);
+    inpDoneDate.disabled = !f.node.done;
+    detailTitle.textContent = f.node.name || 'Node';
+    breadcrumb.textContent = f.path.length ? f.path.map(function (n) { return n.name || '?'; }).join(' / ') : 'Node utama';
+    metaCreated.textContent = fmtDate(f.node.createdAt);
+    metaUpdated.textContent = fmtDate(f.node.updatedAt);
+  }
+
+  function markDirty() { state.dirty = true; updateBar(); }
+
+  function addRoot() {
+    var n = makeNode('Node baru');
+    doc.roots.push(n);
+    state.activeId = n.id;
+    state.search = ''; searchInp.value = '';
+    markDirty();
+    renderTree();
+    startRename(n.id);
+  }
+
+  function addChild(id) {
+    var f = findNode(id);
+    if (!f) return;
+    var n = makeNode('Node baru');
+    f.node.children.push(n);
+    state.collapsed.delete(id);
+    state.activeId = n.id;
+    state.search = ''; searchInp.value = '';
+    markDirty();
+    renderTree();
+    startRename(n.id);
+  }
+
+  function deleteNode(id) {
+    var f = findNode(id);
+    if (!f) return;
+    var total = 1 + countDesc(f.node);
+    var msg = total > 1
+      ? 'Hapus node "' + (f.node.name || '') + '" beserta ' + (total - 1) + ' node turunannya?'
+      : 'Hapus node "' + (f.node.name || '') + '"?';
+    if (!confirm(msg)) return;
+    var arr = f.parent ? f.parent.children : doc.roots;
+    var idx = arr.indexOf(f.node);
+    var nxt = arr[idx + 1] || null;
+    arr.splice(idx, 1);
+    state.collapsed.delete(id);
+    state.activeId = nxt ? nxt.id : (f.parent ? f.parent.id : null);
+    markDirty();
+    renderTree();
+    renderDetail();
+  }
+
+  function startRename(id) {
+    finalizeRename();
+    var row = findRow(id);
+    if (!row) return;
+    var nameEl = row.querySelector('.tree-name');
+    if (!nameEl) return;
+    var f = findNode(id);
+    var input = document.createElement('input');
+    input.className = 'form-control form-control-sm rename-input';
+    input.value = f ? f.node.name : '';
+    input.setAttribute('data-id', id);
+    nameEl.replaceWith(input);
+    state.rename = { id: id, input: input };
+    input.focus();
+    input.select();
+  }
+
+  function finalizeRename() {
+    if (!state.rename) return;
+    var id = state.rename.id, input = state.rename.input;
+    state.rename = null;
+    var val = (input.value || '').trim();
+    var f = findNode(id);
+    if (f) {
+      if (val) { f.node.name = val; f.node.updatedAt = nowIso(); }
+      markDirty();
+    }
+    renderTree();
+    renderDetail();
+  }
+
+  treeEl.addEventListener('click', function (e) {
+    if (e.target.closest('.rename-input')) return;
+    if (e.target.closest('#emptyAdd')) { addRoot(); return; }
+    var dots = e.target.closest('.node-menu');
+    var row = e.target.closest('.tree-row');
+    if (!row) return;
+    var id = row.dataset.id;
+    if (dots) {
+      openNodeMenu(e, id);
+      return;
+    }
+    closeNodeMenu();
+    if (e.target.closest('.tree-icon')) {
+      var n = findNode(id);
+      if (n && n.node.children.length > 0) {
+        if (state.collapsed.has(id)) state.collapsed.delete(id); else state.collapsed.add(id);
+        state.activeId = id;
+        renderTree();
+        renderDetail();
+        return;
+      }
+    }
+    selectNode(id);
+  });
+
+  treeEl.addEventListener('dblclick', function (e) {
+    var row = e.target.closest('.tree-row');
+    if (!row) return;
+    startRename(row.dataset.id);
+  });
+
+  treeEl.addEventListener('focusout', function (e) {
+    if (e.target.classList && e.target.classList.contains('rename-input')) finalizeRename();
+  });
+
+  treeEl.addEventListener('keydown', function (e) {
+    if (!e.target.classList || !e.target.classList.contains('rename-input')) return;
+    if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
+    else if (e.key === 'Escape') { state.rename = null; renderTree(); e.stopPropagation(); }
+  });
+
+  function showNodeMenu(rect) {
+    var mw = 190, mh = 180;
+    var left = Math.max(8, Math.min(rect.right - mw, window.innerWidth - mw - 8));
+    var top = rect.bottom + 4;
+    if (top + mh > window.innerHeight - 8) top = Math.max(8, rect.top - mh - 4);
+    nodeMenu.style.left = left + 'px';
+    nodeMenu.style.top = top + 'px';
+    nodeMenu.classList.add('show');
+  }
+
+  function closeNodeMenu() {
+    nodeMenu.classList.remove('show');
+    menuNodeId = null;
+  }
+
+  function openNodeMenu(e, id) {
+    e.preventDefault();
+    e.stopPropagation();
+    var rect = e.target.closest('.node-menu').getBoundingClientRect();
+    state.activeId = id;
+    renderTree();
+    renderDetail();
+    menuNodeId = id;
+    showNodeMenu(rect);
+  }
+
+  divider.addEventListener('pointerdown', function (e) {
+    e.preventDefault();
+    var startX = e.clientX;
+    var startW = leftPane.getBoundingClientRect().width;
+    var maxW = Math.max(260, divider.parentElement.getBoundingClientRect().width - 260);
+    document.body.classList.add('resizing');
+    function move(ev) {
+      var w = startW + (ev.clientX - startX);
+      w = Math.max(260, Math.min(w, maxW));
+      leftPane.style.width = w + 'px';
+    }
+    function up() {
+      document.body.classList.remove('resizing');
+      document.removeEventListener('pointermove', move);
+      document.removeEventListener('pointerup', up);
+    }
+    document.addEventListener('pointermove', move);
+    document.addEventListener('pointerup', up);
+  });
+
+  menuAddRoot.onclick = function () {
+    closeNodeMenu();
+    addRoot();
+  };
+
+  menuAddChild.onclick = function () {
+    var id = menuNodeId;
+    closeNodeMenu();
+    if (id) addChild(id);
+  };
+
+  menuRename.onclick = function () {
+    var id = menuNodeId;
+    closeNodeMenu();
+    if (id) startRename(id);
+  };
+
+  menuDeleteNode.onclick = function () {
+    var id = menuNodeId;
+    closeNodeMenu();
+    if (id) deleteNode(id);
+  };
+
+  document.addEventListener('mousedown', function (e) {
+    if (nodeMenu.classList.contains('show') && !nodeMenu.contains(e.target)) closeNodeMenu();
+  });
+
+  treeEl.addEventListener('dragstart', function (e) {
+    var row = e.target.closest('.tree-row');
+    if (!row) return;
+    if (state.search) { e.preventDefault(); return; }
+    state.dragId = row.dataset.id;
+    state.dropTarget = null;
+    state.dropped = false;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(row.dataset.id));
+    row.classList.add('dragging');
+  });
+
+  treeEl.addEventListener('dragover', function (e) {
+    clearDropIndicators();
+    if (!state.dragId || state.search) return;
+    var row = e.target && e.target.closest ? e.target.closest('.tree-row') : null;
+    if (!row) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    var zone = computeZone(row, e);
+    if (!zone) return;
+    state.dropTarget = { id: row.dataset.id, position: zone };
+    row.classList.add(zone === 'before' ? 'drop-before' : zone === 'after' ? 'drop-after' : 'drop-child');
+  });
+
+  treeEl.addEventListener('drop', function (e) {
+    if (e.target.closest) e.preventDefault();
+    if (!state.dragId) { clearDropIndicators(); return; }
+    if (!state.dropTarget) {
+      var row = e.target && e.target.closest ? e.target.closest('.tree-row') : null;
+      if (row) state.dropTarget = { id: row.dataset.id, position: 'child' };
+    }
+    performDrop();
+  });
+
+  treeEl.addEventListener('dragend', function () {
+    if (!state.dropped) {
+      clearDropIndicators();
+      state.dragId = null;
+      state.dropTarget = null;
+      renderTree();
+    }
+    state.dropped = false;
+  });
+
+  btnExpandAll.onclick = function () { state.collapsed.clear(); renderTree(); };
+  btnCollapseAll.onclick = function () { state.collapsed = new Set(collectAllIds(doc.roots, [])); renderTree(); };
+  btnClearSearch.onclick = function (e) { e.preventDefault(); searchInp.value = ''; state.search = ''; renderTree(); };
+
+  searchInp.addEventListener('input', function () {
+    state.search = (this.value || '').trim().toLowerCase();
+    renderTree();
+  });
+
+  inpName.addEventListener('input', function () {
+    var f = findNode(state.activeId);
+    if (!f) return;
+    f.node.name = this.value;
+    f.node.updatedAt = nowIso();
+    markDirty();
+    renderTree();
+    detailTitle.textContent = this.value || 'Node';
+    metaUpdated.textContent = fmtDate(f.node.updatedAt);
+  });
+
+  inpDesc.addEventListener('input', function () {
+    var f = findNode(state.activeId);
+    if (!f) return;
+    f.node.description = this.value;
+    f.node.updatedAt = nowIso();
+    markDirty();
+    renderTree();
+    metaUpdated.textContent = fmtDate(f.node.updatedAt);
+  });
+
+  function todayYMD() {
+    var d = new Date();
+    var mm = String(d.getMonth() + 1);
+    var dd = String(d.getDate());
+    if (mm.length < 2) mm = '0' + mm;
+    if (dd.length < 2) dd = '0' + dd;
+    return d.getFullYear() + '-' + mm + '-' + dd;
+  }
+
+  function isoToDmy(s) {
+    if (!s) return '';
+    var m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return '';
+    return m[3] + '/' + m[2] + '/' + m[1];
+  }
+
+  function dmyToIso(s) {
+    if (!s) return '';
+    var m = String(s).replace(/\s+/g, '').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (!m) return '';
+    var dd = m[1].length < 2 ? '0' + m[1] : m[1];
+    var mm = m[2].length < 2 ? '0' + m[2] : m[2];
+    var y = parseInt(m[3], 10), mo = parseInt(mm, 10) - 1, d = parseInt(dd, 10);
+    var dt = new Date(y, mo, d);
+    if (dt.getFullYear() !== y || dt.getMonth() !== mo || dt.getDate() !== d) return '';
+    return m[3] + '-' + mm + '-' + dd;
+  }
+
+  inpAssigned.addEventListener('input', function () {
+    var f = findNode(state.activeId);
+    if (!f) return;
+    f.node.assignedTo = this.value;
+    f.node.updatedAt = nowIso();
+    markDirty();
+    metaUpdated.textContent = fmtDate(f.node.updatedAt);
+  });
+
+  chkDone.addEventListener('change', function () {
+    var f = findNode(state.activeId);
+    if (!f) return;
+    f.node.done = this.checked;
+    if (this.checked) {
+      f.node.doneDate = f.node.doneDate || todayYMD();
+    } else {
+      f.node.doneDate = '';
+    }
+    f.node.updatedAt = nowIso();
+    markDirty();
+    renderDetail();
+  });
+
+  inpDoneDate.addEventListener('change', function () {
+    var f = findNode(state.activeId);
+    if (!f) return;
+    var iso = dmyToIso(this.value);
+    if (!iso && this.value.trim()) {
+      this.value = isoToDmy(f.node.doneDate);
+      return;
+    }
+    f.node.doneDate = iso;
+    this.value = iso ? isoToDmy(iso) : '';
+    f.node.updatedAt = nowIso();
+    markDirty();
+    metaUpdated.textContent = fmtDate(f.node.updatedAt);
+  });
+
+  function confirmDiscard() {
+    if (!state.dirty) return true;
+    return confirm('Perubahan yang belum disimpan akan hilang. Lanjutkan?');
+  }
+
+  function serialize() {
+    return JSON.stringify({ app: 'Hirarki Sistem', version: 1, savedAt: nowIso(), roots: doc.roots }, null, 2);
+  }
+
+  function sanitize(list) {
+    for (var i = 0; i < list.length; i++) {
+      var n = list[i];
+      if (!n || typeof n !== 'object') continue;
+      n.id = (typeof n.id === 'string' && n.id) ? n.id : generateId();
+      n.name = n.name != null ? String(n.name) : '';
+      n.description = n.description != null ? String(n.description) : '';
+      n.assignedTo = n.assignedTo != null ? String(n.assignedTo) : '';
+      n.done = n.done === true;
+      n.doneDate = n.doneDate != null ? String(n.doneDate) : '';
+      n.createdAt = n.createdAt || nowIso();
+      n.updatedAt = n.updatedAt || nowIso();
+      n.children = Array.isArray(n.children) ? n.children : [];
+      sanitize(n.children);
+    }
+  }
+
+  function loadFromText(text, filename, handle) {
+    var roots;
+    try {
+      var data = JSON.parse(text);
+      if (data && Array.isArray(data.roots)) roots = data.roots;
+      else if (data && Array.isArray(data.nodes)) roots = data.nodes;
+      else if (data && data.root) roots = [data.root];
+      else throw new Error('struktur tidak dikenali');
+      if (!roots.length) throw new Error('dokumen kosong (tidak ada node)');
+      sanitize(roots);
+    } catch (err) {
+      alert('File tidak dapat dibuka: ' + (err && err.message ? err.message : err));
+      return;
+    }
+    doc.roots = roots;
+    state.filename = filename || 'hirarki.hirarki';
+    state.fileHandle = handle || null;
+    state.activeId = null;
+    state.collapsed = new Set();
+    state.search = ''; searchInp.value = '';
+    state.dragId = null;
+    state.dropTarget = null;
+    state.dirty = false;
+    renderTree();
+    renderDetail();
+    updateBar();
+  }
+
+  function newDoc() {
+    if (!confirmDiscard()) return;
+    doc.roots = [makeNode('Hirarki')];
+    state.activeId = doc.roots[0].id;
+    state.filename = 'Hirarki Baru.hirarki';
+    state.fileHandle = null;
+    state.collapsed = new Set();
+    state.search = ''; searchInp.value = '';
+    state.dragId = null;
+    state.dropTarget = null;
+    state.dirty = false;
+    renderTree();
+    renderDetail();
+    updateBar();
+  }
+
+  function openDoc() {
+    if (!confirmDiscard()) return;
+    if (window.showOpenFilePicker) {
+      window.showOpenFilePicker({
+        types: [{ description: 'Dokumen Hirarki', accept: { 'application/json': ['.hirarki', '.json'] } }],
+        multiple: false
+      }).then(function (handles) {
+        var h = handles[0];
+        return h.getFile().then(function (file) {
+          return file.text().then(function (text) {
+            loadFromText(text, file.name, h);
+          });
+        });
+      }).catch(function (err) {
+        if (!err || err.name !== 'AbortError') alert('Gagal membuka file: ' + (err && err.message ? err.message : err));
+      });
+    } else {
+      fileInput.click();
+    }
+  }
+
+  fileInput.addEventListener('change', function () {
+    var file = this.files && this.files[0];
+    this.value = '';
+    if (!file) return;
+    if (!confirmDiscard()) return;
+    var fr = new FileReader();
+    fr.onload = function () { loadFromText(String(fr.result || ''), file.name, null); };
+    fr.onerror = function () { alert('Gagal membaca file.'); };
+    fr.readAsText(file);
+  });
+
+  function checkPermission(handle) {
+    return handle.queryPermission({ mode: 'readwrite' }).then(function (r) {
+      if (r === 'granted') return true;
+      return handle.requestPermission({ mode: 'readwrite' }).then(function (r2) { return r2 === 'granted'; });
+    }).catch(function () { return false; });
+  }
+
+  function writeHandle(handle, text) {
+    return handle.createWritable().then(function (w) {
+      return w.write(text).then(function () { return w.close(); });
+    });
+  }
+
+  function finishSave() { state.dirty = false; updateBar(); }
+
+  function ensureExt(name) { return /\.hirarki$/i.test(name) ? name : name + '.hirarki'; }
+
+  function downloadFallback(name, text) {
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type: 'application/json;charset=utf-8' }));
+    a.download = ensureExt(name);
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 1500);
+  }
+
+  function saveDoc(as) {
+    var json = serialize();
+    function doSaveAs() {
+      if (window.showSaveFilePicker) {
+        return window.showSaveFilePicker({
+          suggestedName: (state.filename || 'hirarki').replace(/\.hirarki$/i, '') + '.hirarki',
+          types: [{ description: 'Dokumen Hirarki', accept: { 'application/json': ['.hirarki'] } }]
+        }).then(function (h) {
+          return writeHandle(h, json).then(function () {
+            state.fileHandle = h;
+            state.filename = h.name;
+            finishSave();
+          });
+        }).catch(function (err) {
+          if (!err || err.name !== 'AbortError') alert('Gagal menyimpan: ' + (err && err.message ? err.message : err));
+        });
+      }
+      downloadFallback(state.filename || 'hirarki.hirarki', json);
+      finishSave();
+      return Promise.resolve();
+    }
+    if (!as && state.fileHandle) {
+      return checkPermission(state.fileHandle).then(function (ok) {
+        if (ok) {
+          return writeHandle(state.fileHandle, json).then(finishSave).catch(function (err) {
+            alert('Gagal menyimpan: ' + (err && err.message ? err.message : err));
+          });
+        }
+        return doSaveAs();
+      });
+    }
+    return doSaveAs();
+  }
+
+  $('fileMenu').addEventListener('click', function (e) {
+    var item = e.target.closest('[data-action]');
+    if (!item) return;
+    e.preventDefault();
+    var a = item.dataset.action;
+    if (a === 'new') newDoc();
+    else if (a === 'open') openDoc();
+    else if (a === 'save') saveDoc(false);
+    else if (a === 'saveas') saveDoc(true);
+  });
+
+  document.addEventListener('keydown', function (e) {
+    var mod = e.ctrlKey || e.metaKey;
+    var t = document.activeElement;
+    var editing = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+    var key = (e.key || '').toLowerCase();
+    if (mod && key === 'n') { e.preventDefault(); newDoc(); }
+    else if (mod && key === 'o') { e.preventDefault(); openDoc(); }
+    else if (mod && e.shiftKey && key === 's') { e.preventDefault(); saveDoc(true); }
+    else if (mod && key === 's') { e.preventDefault(); saveDoc(false); }
+    else if (!mod && e.key === 'F2' && state.activeId) { e.preventDefault(); startRename(state.activeId); }
+    else if (!mod && e.key === 'Escape') { closeNodeMenu(); }
+    else if (!mod && !editing && (e.key === 'Delete' || e.key === 'Backspace') && state.activeId) {
+      e.preventDefault();
+      deleteNode(state.activeId);
+    }
+  });
+
+  doc.roots = [makeNode('Hirarki')];
+  state.activeId = doc.roots[0].id;
+  renderTree();
+  renderDetail();
+  updateBar();
+})();
+</script>
+</body>
+</html>
