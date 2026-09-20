@@ -28,6 +28,8 @@
   .tree-row.active .tree-icon i { color: #fff; }
   .tree-name { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .node-menu { margin-left: auto; padding: 0 4px; width: 22px; text-align: center; border-radius: 4px; color: #8a94a0; line-height: 1; }
+  .done-check { color: #198754; padding-right: 4px; font-size: .95em; }
+  .tree-row.active .done-check { color: #7be0a5; }
   .node-menu:hover { color: #0d6efd; background: #e9ecef; }
   .tree-row.active .node-menu { color: #dbe8ff; }
   .tree-row.active .node-menu:hover { color: #fff; background: rgba(255,255,255,.2); }
@@ -141,7 +143,7 @@
 
 <main class="d-flex overflow-hidden">
 
-  <section id="leftPane" class="pane d-flex flex-column bg-white border-end flex-shrink-0" style="width:40%; min-width:260px;">
+  <section id="leftPane" class="pane d-flex flex-column bg-white border-end flex-shrink-0" style="width:400px; min-width:260px;">
     <div class="pane-header d-flex flex-column gap-2 border-bottom">
       <div class="d-flex align-items-center gap-2">
         <div class="input-group input-group-sm flex-grow-1">
@@ -430,6 +432,7 @@
         (hasKids ? (collapsed ? 'bi-folder-fill folder-closed' : 'bi-folder2-open folder-open') : 'bi-file-earmark file-icon') +
         '"></i></span>' +
         '<span class="tree-name">' + esc(node.name || '') + '</span>' +
+        (node.done ? '<span class="done-check" title="Selesai"><i class="bi bi-check-circle-fill"></i></span>' : '') +
         '<span class="node-menu" title="Menu node"><i class="bi bi-three-dots-vertical"></i></span>';
       container.appendChild(row);
       if (hasKids && !collapsed) {
@@ -793,6 +796,7 @@
     }
     f.node.updatedAt = nowIso();
     markDirty();
+    renderTree();
     renderDetail();
   });
 
