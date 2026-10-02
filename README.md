@@ -3,7 +3,7 @@
 Aplikasi web untuk mengelola hirarki atau pohon struktur organisasi, proyek, maupun data bertingkat lainnya. Semua fitur tersimpan dalam satu file HTML (`index.html`) sehingga mudah dibawa dan dijalankan tanpa server — cukup buka di peramban.
 
 > **Demo video:** https://youtu.be/cBe0hN7ZHIM
-
+> **Demo onlie:** https://hirarki.swatizen.com
 ## Fitur
 
 - **Treeview interaktif** — lihat, perluas, dan ciutkan seluruh hirarki dengan garis penghubung antar node.
